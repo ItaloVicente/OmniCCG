@@ -1,0 +1,4 @@
+Pegar histórico de commits por tempo
+Atualização para o Nicad6
+Bug Fixes - O código não funcionava ao só utilizar ele
+Pegar todos os commits independente do tempo

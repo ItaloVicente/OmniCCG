@@ -1,14 +1,18 @@
 import os
 import time
+import shutil
 from copy import copy
 import xml.etree.ElementTree as etree
 from xml.etree import ElementTree as ET
+from git import Repo
 
 
 # Project settings
-GIT_URL = "https://github.com/libgdx/libgdx" # The URL of the git repository to clone.
+GIT_URL = "https://github.com/apache/avro" # The URL of the git repository to clone.
 COMMIT_INTERVAL = 10       # How often a commit should be analysed (put 1 for every commit)
+ALL_COMMITS = True        # Get all Commits to defined time
 MAX_COMMITS = 10           # Maximum number of commits to analyse
+DAYS = 365
 USE_ICLONES = False         # Also use iClones to detect clones
 LANGUAGE = "java"             # Language extension of project ("java" of "c")
 
@@ -282,14 +286,26 @@ def SetupRepo():
     os.system('git clone ' + GIT_URL + ' ' + REPO_DIR) # Clone REPO
     print(" Repository setup complete.\n")
 
-def PrepareGitHistory():
+import os
+import subprocess
+from pathlib import Path
+from datetime import datetime, timedelta, timezone
+
+
+def PrepareGitHistory(days: int):
     print("Getting git history")
-    # Check if the history file exists
-    if os.path.exists(HIST_FILE):
-        os.system('rm ' + HIST_FILE) # Remove history file
-    os.system('(cd ' + REPO_DIR +'; git checkout master -f > /dev/null 2>&1)')
-    os.system('git --git-dir workspace/repo/.git log --first-parent --oneline --full-history --sparse > ' + HIST_FILE)
-    print(" Git history file updated.\n")
+    repo = Repo(REPO_DIR)
+    since = datetime.now() - timedelta(days=days)
+
+    commits = repo.iter_commits(since=since.isoformat())
+    lines = [
+        f"{c.hexsha[:7]} {datetime.fromtimestamp(c.committed_date).date()} {c.author.name} {c.summary}"
+        for c in commits
+    ]
+
+    Path(HIST_FILE).write_text("\n".join(lines), encoding="utf-8")
+    print(f"Wrote {len(lines)} commit(s) to {HIST_FILE}")
+
 
 def GetHashes():
     hashes = []
@@ -310,16 +326,34 @@ def GetHashes():
 
 def PrepareSourceCode():
     print("Preparing source code")
-    # Check if the dataset directory exists
+    exists_java_file = False
+
+    # Remove o diretório DATA_DIR se já existir
     if os.path.exists(DATA_DIR):
-        os.system('rm -rf ' + DATA_DIR)
+        shutil.rmtree(DATA_DIR)
 
-    os.system('mkdir ' + DATA_DIR) # Make the dataset directory
-    os.system('mkdir ' + PROD_DATA_DIR) # Make the production code directory
+    os.makedirs(DATA_DIR, exist_ok=True)       # Cria o dataset directory
+    os.makedirs(PROD_DATA_DIR, exist_ok=True)  # Cria o production code directory
 
-    # Copy all production files to the production directory
-    os.system('for i in `find . -iname \'*.' + LANGUAGE + '\' | grep -vi \"test\"` ; do cp $i ' + PROD_DATA_DIR + '; done')
-    print(" Source code ready for clone analysis.\n")
+    # Copia todos os arquivos de produção preservando a estrutura de diretórios
+    for root, dirs, files in os.walk(REPO_DIR):
+        for file in files:
+            if file.endswith('.' + LANGUAGE) and 'test' not in os.path.join(root, file).lower():
+                src_path = os.path.join(root, file)
+                
+                # recria a estrutura relativa ao REPO_DIR
+                rel_path = os.path.relpath(root, REPO_DIR)
+                dst_dir = os.path.join(PROD_DATA_DIR, rel_path)
+                os.makedirs(dst_dir, exist_ok=True)
+
+                dst_path = os.path.join(dst_dir, file)
+                shutil.copy2(src_path, dst_path)
+                exists_java_file = True
+
+    print("Source code ready for clone analysis.\n")
+
+    return exists_java_file
+
 
 def StartFromPreviousVersion():
     # Check if the results directory exists
@@ -574,7 +608,7 @@ def timeToString(seconds):
 def DataCollection():
     print("STARTING DATA COLLECTION SCRIPT\n")
     SetupRepo()
-    PrepareGitHistory()
+    PrepareGitHistory(DAYS)
     hashes = GetHashes()
     time.sleep(1)
 
@@ -594,7 +628,7 @@ def DataCollection():
         CUR_RES_DIR = RES_DIR + "/" + str(hash_index) + '_' + current_hash
 
         # Check if maximum number of commits has been analyzed
-        if analysis_index > MAX_COMMITS:
+        if analysis_index > MAX_COMMITS and not ALL_COMMITS:
             printInfo('Maximum amount of commits has been analyzed. Ending data collection...')
             break
 
@@ -604,7 +638,10 @@ def DataCollection():
             time.sleep(1)
 
         # Run clone detection on current hash
-        PrepareSourceCode()
+        find_files = PrepareSourceCode()
+        if not find_files:
+            continue
+        
         RunCloneDetection()
 
         # Run genealogy analysis
@@ -619,7 +656,11 @@ def DataCollection():
         total_time += iteration_time
         print("Iteration finished in " + timeToString(int(iteration_time)))
         print(" >>> Average iteration time: " + timeToString(int(total_time/analysis_index)))
-        print(" >>> Estimated remaining time: " + timeToString(int((total_time/analysis_index)*(MAX_COMMITS-analysis_index))))
+        if ALL_COMMITS:
+            print(" >>> Estimated remaining time: " + timeToString(int((total_time/analysis_index)*(len(hashes)-analysis_index))))
+        else:
+            print(" >>> Estimated remaining time: " + timeToString(int((total_time/analysis_index)*(MAX_COMMITS-analysis_index))))
+
         time.sleep(1)
 
     # Write Lineage Data to Files
@@ -628,5 +669,5 @@ def DataCollection():
     print("\nDONE")
 
 if __name__ == "__main__":
-    os.system('rm -rf results')
+    os.system(f'rm -rf {RES_DIR} && rm -rf {DATA_DIR} && rm -rf {HIST_FILE}')
     DataCollection()
