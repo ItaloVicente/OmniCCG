@@ -1,18 +1,82 @@
 import os
 import time
 import shutil
+from git import Repo
 from copy import copy
+from pathlib import Path
 import xml.etree.ElementTree as etree
 from xml.etree import ElementTree as ET
-from git import Repo
+from datetime import datetime, timedelta
+from wrapper_solution import check_snippet_existence
+import subprocess
+from typing import List, Dict
+
+def get_commit_neighbors(repo_path: str, commit_ref: str, n: int = 5, scope: str = "--all", order: str = "topo") -> dict:
+    import os
+    import subprocess
+
+    if not os.path.isdir(repo_path):
+        raise RuntimeError("Invalid repository path.")
+
+    def run_git(args):
+        p = subprocess.run(["git"] + args, cwd=repo_path, capture_output=True, text=True)
+        if p.returncode != 0:
+            raise RuntimeError(p.stderr.strip() or f"git {' '.join(args)} failed")
+        return p.stdout
+
+    # Resolve full hash
+    target_full = run_git(["rev-parse", commit_ref]).strip()
+
+    # Build ordered list of commits within the chosen scope
+    revs = ["--all"] if scope == "--all" else [scope]
+    order_flag = "--topo-order" if order == "topo" else "--date-order"
+    rev_list_out = run_git(["rev-list", order_flag] + revs)
+    commits = [c for c in (rev_list_out.splitlines()) if c]
+    if not commits:
+        raise RuntimeError("No commits found in the selected scope.")
+
+    try:
+        idx = commits.index(target_full)
+    except ValueError:
+        raise RuntimeError("The target commit is not present in the selected scope. Try scope='--all' or a different branch.")
+
+    before_hashes = commits[max(0, idx - n): idx]
+    after_hashes = commits[idx + 1: idx + 1 + n]
+
+    # Helper to format commit metadata in one git call
+    def format_commits(hashes):
+        if not hashes:
+            return []
+        fmt = "%H%x01%h%x01%an%x01%ad%x01%s"
+        out = run_git(["show", "-s", f"--format={fmt}", "--date=iso"] + hashes)
+        rows = []
+        for line in out.splitlines():
+            parts = line.split("\x01")
+            if len(parts) == 5:
+                rows.append({
+                    "hash": parts[0],
+                    "short": parts[1],
+                    "author": parts[2],
+                    "date": parts[3],
+                    "subject": parts[4],
+                })
+        return rows
+
+    before = format_commits(before_hashes)
+    target = format_commits([target_full])[0]
+    after = format_commits(after_hashes)
+
+    return {"before": before, "target": target, "after": after}
 
 
 # Project settings
-GIT_URL = "https://github.com/apache/avro" # The URL of the git repository to clone.
-COMMIT_INTERVAL = 10       # How often a commit should be analysed (put 1 for every commit)
-ALL_COMMITS = True        # Get all Commits to defined time
-MAX_COMMITS = 10           # Maximum number of commits to analyse
-DAYS = 365
+GIT_URL = "https://github.com/tjake/Jlama" # The URL of the git repository to clone.
+USE_INTERVAL = False
+COMMIT_INTERVAL = 10
+FROM_BEGIN = True       # How often a commit should be analysed (put 1 for every commit)
+USE_MAX_COMMITS = True        # Get all Commits to defined time
+MAX_COMMITS = 80         # Maximum number of commits to analyse
+DAYS = 365 * 2
 USE_ICLONES = False         # Also use iClones to detect clones
 LANGUAGE = "java"             # Language extension of project ("java" of "c")
 
@@ -26,14 +90,20 @@ REPO_DIR = WS_DIR + "/repo"
 DATA_DIR = WS_DIR + "/dataset"
 PROD_DATA_DIR = DATA_DIR + "/production"
 
+# check when a file was moved
+MOVED = False
+
+
 # Files
 HIST_FILE = WS_DIR + "/githistory.txt"
 P_RES_FILE = RES_DIR + "/production_results.xml"
 P_DENS_FILE = RES_DIR + "/production_density.csv"
 
 # Data
-P_LIN_DATA = []
-P_DENS_DATA = []
+P_LIN_DATA = [] # All Lineages
+P_DENS_DATA = [] # All Density
+
+# get_commit_neighbors(REPO_DIR, "af32499")
 
 # Output functions
 def printWarning(message):
@@ -48,11 +118,12 @@ def printInfo(message):
 # Classes
 class CloneFragment():
     def __init__(self, file, ls, le, fn = "", fh = 0):
-        self.file = file
+        self.file = file.replace('/dataset/production','/repo')
         self.ls = ls
         self.le = le
         self.function_name = fn
         self.function_hash = fh
+        self.code_content = self.get_code_content()
 
     def contains(self, other):
         return self.file == other.file and self.ls <= other.ls and self.le >= other.le
@@ -60,8 +131,40 @@ class CloneFragment():
     def __eq__(self, other):
         return self.file == other.file and self.ls == other.ls and self.le == other.le
 
+    def get_code_content(self):
+        try:
+            path = self.file.replace('../../','./')
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+            # converte para base-0 e inclui end_line
+            start_idx = max(0, self.ls - 1)
+            end_idx = min(len(lines), self.le)
+            snippet = "".join(lines[start_idx:end_idx])
+            # normaliza quebras de linha
+            return snippet.replace("\r\n", "\n").replace("\r", "\n")
+        except Exception:
+            # Em caso de erro de leitura, retornamos None para indicar desconhecido
+            return None
+
     def matches(self, other):
-        return self.file == other.file and self.function_name == other.function_name
+        # se não deu para ler algum trecho, conservadoramente falha
+        if self.code_content is None or other.code_content is None:
+            return False
+
+        contents_equal = (self.code_content == other.code_content)
+        files_differ   = (self.file != other.file)
+
+        # marca movimento se o conteúdo for o mesmo mas o arquivo mudou
+        global MOVED
+        if contents_equal and files_differ:
+            MOVED = True
+
+        # mantém a restrição original sobre o nome da função
+        return contents_equal and (self.function_name == other.function_name)
+
+
+    # def matches(self, other):
+    #     return self.file == other.file and self.function_name == other.function_name
 
     def matchesStrictly(self, other):
         return self.file == other.file and self.function_name == other.function_name and (self.ls == other.ls or self.function_hash == other.function_hash)
@@ -106,15 +209,49 @@ class CloneClass():
         return count
 
 class CloneVersion():
-    def __init__(self, cc, h, n, evo = "None", chan = "None"):
+    # TODO: I'm stop here!
+    def __init__(self, cc, h, n, evo = "None", chan = "None", origin=False):
         self.cloneclass = cc
         self.hash = h
         self.nr = n
         self.evolution_pattern = evo
         self.change_pattern = chan
+        self.origin = origin
+        self.moved = False
+
+    def classify_snippet_existence(self, list_snippet_existence):
+        n = len(list_snippet_existence)
+        t = sum(1 for x in list_snippet_existence if x)
+        f = n - t
+        if n == 2 and t == 2:
+            return "simple", "between diff"
+        if n == 2 and t == 1:
+            return "simple", "between diff and persistent"
+        if n == 2 and t == 0:
+            return "simple", "false origin"
+        if n > 2 and t == 1:
+            return "complex", "between diff and multiple persistents"
+        if n > 2 and f == 1:
+            return "complex", "between multiple diffs and persistents"
+        if n > 2 and t == n:
+            return "complex", "between multiple diffs"
+        if n > 2 and t == 0:
+            return "complex", "false origin"
+        return "------", "------"
 
     def toXML(self):
-        s = "\t<version nr=\"%d\" hash=\"%s\" evolution=\"%s\" change=\"%s\">\n" % (self.nr, self.hash, self.evolution_pattern, self.change_pattern)
+        global MOVED
+        if self.origin:
+            list_snippet_existence = [check_snippet_existence(REPO_DIR, fragment.file, fragment.ls, fragment.le, self.hash) for fragment in self.cloneclass.fragments]
+            qtd_clones, origin_type = self.classify_snippet_existence(list_snippet_existence)
+            
+            s = "\t<version nr=\"%d\" hash=\"%s\" evolution=\"%s\" change=\"%s\" qtd_clones=\"%s\" origin_type=\"%s\">\n" % (self.nr, self.hash, self.evolution_pattern, self.change_pattern, qtd_clones, origin_type)
+        elif MOVED:
+            s = "\t<version nr=\"%d\" hash=\"%s\" evolution=\"%s\" change=\"%s\" move=\"%s\">\n" % (self.nr, self.hash, self.evolution_pattern, self.change_pattern, MOVED)
+            MOVED = False
+        else:
+            s = "\t<version nr=\"%d\" hash=\"%s\" evolution=\"%s\" change=\"%s\" move=\"%s\">\n" % (self.nr, self.hash, self.evolution_pattern, self.change_pattern, MOVED)
+        
         s += self.cloneclass.toXML()
         s += "\t</version>\n"
         return s
@@ -286,26 +423,28 @@ def SetupRepo():
     os.system('git clone ' + GIT_URL + ' ' + REPO_DIR) # Clone REPO
     print(" Repository setup complete.\n")
 
-import os
-import subprocess
-from pathlib import Path
-from datetime import datetime, timedelta, timezone
-
 
 def PrepareGitHistory(days: int):
     print("Getting git history")
     repo = Repo(REPO_DIR)
-    since = datetime.now() - timedelta(days=days)
 
-    commits = repo.iter_commits(since=since.isoformat())
+    now = datetime.now()
+
+    if FROM_BEGIN:
+        since = None  # Sem limite inferior
+        until = now - timedelta(days=days)
+        commits = repo.iter_commits(until=until.isoformat())
+    else:
+        since = now - timedelta(days=days)
+        commits = repo.iter_commits(since=since.isoformat())
+
     lines = [
         f"{c.hexsha[:7]} {datetime.fromtimestamp(c.committed_date).date()} {c.author.name} {c.summary}"
         for c in commits
-    ]
+    ] 
 
     Path(HIST_FILE).write_text("\n".join(lines), encoding="utf-8")
     print(f"Wrote {len(lines)} commit(s) to {HIST_FILE}")
-
 
 def GetHashes():
     hashes = []
@@ -322,7 +461,6 @@ def GetHashes():
             hashes.append(h)
     hashes.reverse()
     return hashes
-
 
 def PrepareSourceCode():
     print("Preparing source code")
@@ -541,6 +679,7 @@ def RunGenealogyAnalysis(commitNr, hash):
     if not P_LIN_DATA: # If there is no lineage data for production yet
         for pcc in pcloneclasses:
             v = CloneVersion(pcc, hash, commitNr)
+            v.origin = True
             l = Lineage()
             l.versions.append(v)
             P_LIN_DATA.append(l)
@@ -562,6 +701,7 @@ def RunGenealogyAnalysis(commitNr, hash):
 
                     evolution, change = GetPattern(lineage.versions[-1].cloneclass, pcc)
                     if evolution == "Same" and change == "Same" and lineage.versions[-1].evolution_pattern == "Same" and lineage.versions[-1].change_pattern == "Same":
+                        # I need check here!
                         lineage.versions[-1].nr = commitNr
                         lineage.versions[-1].hash = hash
                     else:
@@ -570,6 +710,7 @@ def RunGenealogyAnalysis(commitNr, hash):
                     break
             if not found: # There is no lineage yet for this cloneclass, start a new lineage
                 v = CloneVersion(pcc, hash, commitNr)
+                v.origin = True
                 l = Lineage()
                 l.versions.append(v)
                 P_LIN_DATA.append(l)
@@ -577,7 +718,7 @@ def RunGenealogyAnalysis(commitNr, hash):
     print(" Finished genealogy analysis.\n")
 
     # Run clone density analysis
-    RunDensityAnalysis(commitNr, pcloneclasses)
+    # RunDensityAnalysis(commitNr, pcloneclasses)
 
 def WriteLineageFile(lineages, filename):
     output_file = open(filename, "w+")
@@ -619,16 +760,27 @@ def DataCollection():
         start += COMMIT_INTERVAL
     analysis_index = 0
     total_time = 0
-    for hash_index in range(start, len(hashes), COMMIT_INTERVAL):
+
+    if USE_INTERVAL:
+        range_hash = range(start, len(hashes), COMMIT_INTERVAL)
+    else:
+        range_hash = range(start, len(hashes))
+    
+    if USE_MAX_COMMITS:
+        range_hash = range_hash[:MAX_COMMITS]
+
+    for hash_index in range_hash:
         iteration_start_time = time.time()
         analysis_index += 1
         current_hash = hashes[hash_index]
+
+        hash_index += 1 
         printInfo('Analyzing commit nr.' + str(hash_index) + ' with hash '+ current_hash)
         global CUR_RES_DIR
         CUR_RES_DIR = RES_DIR + "/" + str(hash_index) + '_' + current_hash
 
         # Check if maximum number of commits has been analyzed
-        if analysis_index > MAX_COMMITS and not ALL_COMMITS:
+        if analysis_index > MAX_COMMITS and not USE_MAX_COMMITS:
             printInfo('Maximum amount of commits has been analyzed. Ending data collection...')
             break
 
@@ -649,18 +801,18 @@ def DataCollection():
 
         # Clean-up
         os.system('rm -rf ' + CUR_RES_DIR)
-
         # time
         iteration_end_time = time.time()
         iteration_time = iteration_end_time - iteration_start_time
         total_time += iteration_time
         print("Iteration finished in " + timeToString(int(iteration_time)))
         print(" >>> Average iteration time: " + timeToString(int(total_time/analysis_index)))
-        if ALL_COMMITS:
-            print(" >>> Estimated remaining time: " + timeToString(int((total_time/analysis_index)*(len(hashes)-analysis_index))))
+        if USE_MAX_COMMITS:
+            print(" >>> Estimated remaining time: " + timeToString(int((total_time/analysis_index)*(len(range_hash)-analysis_index))))
         else:
             print(" >>> Estimated remaining time: " + timeToString(int((total_time/analysis_index)*(MAX_COMMITS-analysis_index))))
 
+        WriteLineageFile(P_LIN_DATA, P_RES_FILE)
         time.sleep(1)
 
     # Write Lineage Data to Files
@@ -669,5 +821,5 @@ def DataCollection():
     print("\nDONE")
 
 if __name__ == "__main__":
-    os.system(f'rm -rf {RES_DIR} && rm -rf {DATA_DIR} && rm -rf {HIST_FILE}')
+    os.system(f'rm -rf {RES_DIR} && rm -rf {DATA_DIR} && rm -rf {HIST_FILE} && rm -rf {REPO_DIR}')
     DataCollection()
