@@ -1,64 +1,72 @@
-import subprocess
-import xmltodict
-import json
-import copy
-from pathlib import Path
-from git import Repo
-from git import Repo, NULL_TREE
-from typing import List, Dict
-import subprocess, os
-import subprocess
+from typing import List
+import git
 
-def check_snippet_existence(repo_path: str, file_path: str, start_line: str, end_line: str, commit_hash: str):
+def analyze_snippets(snippets: List[str]) -> str:
+    if len(snippets) < 2:
+        raise ValueError("The list must have at least 2 elements.")
+    
+    if snippets.count("no_change") == 1 and snippets.count("complete_method") == len(snippets) - 1:
+        return "type-1"
+    if snippets.count("no_change") == 1 and snippets.count("modify_method") == len(snippets) - 1:
+        return "type-2"
+    if snippets.count("no_change") == 0 and snippets.count("complete_method") >= 1 and snippets.count("modify_method") >= 1:
+        return "type-3"
+    if snippets.count("complete_method") >= len(snippets):
+        return "type-4"
+    if snippets.count("modify_method") >= len(snippets):
+        return "type-5"
+    if snippets.count("no_change") >= 1 and snippets.count("complete_method") >= 1 and snippets.count("modify_method") >= 1:
+        return "type-6"
+    return "unclassified"
+
+def analyze_method_change(repo_path: str, file_path: str, start_line: int, end_line: int, commit_hash: str) -> str:
     file_path = file_path.replace('../../', './').replace('workspace/dataset/production', repo_path)
-
-    def was_range_added_in_commit(commit_hash: str, file_path: str, start_line: int, end_line: int, repo_path: str = ".") -> bool:
-        from git import Repo
-        try:
-            repo = Repo(repo_path)
-            commit = repo.commit(commit_hash)
-            blame = repo.blame(commit.hexsha, file_path.replace('workspace/repo',''))
-        except Exception:
-            return False
-        total = sum(len(lines) for _, lines in blame)
-        if start_line < 1 or end_line < start_line or end_line > total:
-            return False
-        i = 1
-        for c, lines in blame:
-            length = len(lines)
-            bstart = i
-            bend = i + length - 1
-            s = max(start_line, bstart)
-            e = min(end_line, bend)
-            if s <= e and c.hexsha != commit.hexsha:
-                return False
-            i += length
-        return True
-
-    def get_file_content_at_commit(repo_path: str, commit_hash: str, file_path: str) -> str:
-        repo = Repo(repo_path)
+    
+    try:
+        repo = git.Repo(repo_path)
         commit = repo.commit(commit_hash)
 
-        # Ensure file path is relative to the repo root
-        rel_path = Path(file_path).as_posix().replace('workspace/repo/', '')
+        # Se não há commit pai, significa que é o commit inicial (arquivo novo)
+        if not commit.parents:
+            return "complete_method"
 
-        try:
-            blob = commit.tree / rel_path
-            return blob.data_stream.read().decode("utf-8", errors="ignore")
-        except KeyError:
-            raise FileNotFoundError(f"File {rel_path} not found in commit {commit_hash}")
+        parent = commit.parents[0]
 
-    # Extract snippet at the given commit
-    file_content = get_file_content_at_commit(repo_path, commit_hash, file_path)
-    if file_content is None:
-        raise ValueError("File does not exist in the given commit.")
+        def get_file_content(commit, path: str):
+            """Retorna o conteúdo de um arquivo em um commit específico, ou None se não existir."""
+            try:
+                blob = commit.tree / path.replace('./workspace/repo/', '')
+                return blob.data_stream.read().decode('utf-8', errors='ignore')
+            except KeyError:
+                return None
 
-    snippet = '\n'.join(file_content.splitlines()[start_line - 1:end_line])
-    the_was_added_in_coomit = was_range_added_in_commit(commit_hash, file_path, start_line, end_line, repo_path)
+        # Lê o conteúdo do arquivo no commit atual e no commit pai
+        current_content = get_file_content(commit, file_path)
+        parent_content = get_file_content(parent, file_path)
 
-    if the_was_added_in_coomit:
-        return True
-    return False 
+        # Se o arquivo não existe no commit atual → foi removido
+        if current_content is None:
+            return "modify_method"
 
+        # Extrai as linhas do método (atual)
+        current_method_lines = current_content.splitlines()[start_line - 1:end_line]
 
+        # Extrai as linhas do método (pai), se o arquivo existia
+        parent_method_lines = []
+        if parent_content is not None:
+            parent_method_lines = parent_content.splitlines()[start_line - 1:end_line]
 
+        # Caso 1: método não existia antes e agora existe
+        if not parent_method_lines and current_method_lines:
+            return "complete_method"
+
+        # Caso 2: método existia e mudou
+        if parent_method_lines != current_method_lines:
+            return "modify_method"
+
+        # Caso 3: método não mudou
+        return "no_change"
+
+    except (git.exc.GitCommandError, KeyError, IndexError) as e:
+        print(f"An error occurred: {e}")
+        return "modify_method"

@@ -7,4 +7,36 @@ Quantidade dos que estão em arquivos diferentes
 Pegar os primeiros commits e não os últimos
 Saber quando um arquivo foi movido
 Exibir os tipos de NASCIMENTO DE UMA GENEALOGIA
+Pegar o registro do before_hash 
+Registro de clone movido
 
+
+Capturar o conteúdo do códgo do XML
+Capturar Merge Commits
+Exibir quais arquivos foram alterados ou criados na ORIGEM
+Exibir quais arquivos foram modificados ou removidos na MORTE
+
+Fixes:
+- Adicionar e Remover ao mesmo tempo
+- Tipos de adição? Tipo de remoção?
+- Validar de casos de Consistent chage
+- Validar de casos de Inconsistent chage
+- Mudar before_hash -> parent_hash
+- Tornar a ferramenta de uma forma independente!
+- Procura entender como 
+
+Sobre visualização:
+- Dizer que a ferramenta posibilita linha de comando!
+- Podemos ter 2 níveis de interface gráfica:
+- Exibir o XML
+- A pessoa montaria uma genealogia
+
+Validar!
+============ validado
+Type-1 - No Change and Complete method
+Type-3 - Complete and modifyed
+Type-4 -  All complete
+Type-5 -  All modifyed
+============= não validado
+Type-2 - No change and  modifyed
+Type-6 - One of each
