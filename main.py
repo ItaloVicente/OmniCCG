@@ -70,8 +70,8 @@ class CloneFragment():
         self.code_content = self.get_code_content()
         self.origin_note = None
         self.death_note = None
-        self.evolution_note = None
         self.move_note = None
+        self.evolution_note = None
 
     def contains(self, other):
         return self.file == other.file and self.ls <= other.ls and self.le >= other.le
@@ -141,10 +141,14 @@ class CloneFragment():
             return "\t\t\t<source file=\"%s\" startline=\"%d\" endline=\"%d\" function=\"%s\" hash=\"%d\" origin_note=\"%s\"></source>\n" % (self.file, self.ls, self.le,self.function_name, self.function_hash, self.origin_note)
         if self.death_note:
             return "\t\t\t<source file=\"%s\" startline=\"%d\" endline=\"%d\" function=\"%s\" hash=\"%d\" death_note=\"%s\"></source>\n" % (self.file, self.ls, self.le,self.function_name, self.function_hash, self.death_note)
-        if self.evolution_note:
-            return "\t\t\t<source file=\"%s\" startline=\"%d\" endline=\"%d\" function=\"%s\" hash=\"%d\" evolution_note=\"%s\"></source>\n" % (self.file, self.ls, self.le,self.function_name, self.function_hash, self.evolution_note)
+        # if self.evolution_note:
+            # return "\t\t\t<source file=\"%s\" startline=\"%d\" endline=\"%d\" function=\"%s\" hash=\"%d\" evolution_note=\"%s\"></source>\n" % (self.file, self.ls, self.le,self.function_name, self.function_hash, self.evolution_note)
         if self.move_note:
             return "\t\t\t<source file=\"%s\" startline=\"%d\" endline=\"%d\" function=\"%s\" hash=\"%d\" move_note=\"%s\"></source>\n" % (self.file, self.ls, self.le,self.function_name, self.function_hash, self.move_note)
+
+        if self.evolution_note:
+            return "\t\t\t<source file=\"%s\" startline=\"%d\" endline=\"%d\" function=\"%s\" hash=\"%d\" evolution_note=\"%s\"></source>\n" % (self.file, self.ls, self.le,self.function_name, self.function_hash, self.evolution_note)
+
         return "\t\t\t<source file=\"%s\" startline=\"%d\" endline=\"%d\" function=\"%s\" hash=\"%d\"></source>\n" % (self.file, self.ls, self.le,self.function_name, self.function_hash)
 
     def countLOC(self):
@@ -199,14 +203,14 @@ class CloneVersion():
         if self.origin:
             code_types = [analyze_method_change(REPO_DIR, fragment.file, fragment.ls, fragment.le, self.hash) for fragment in self.cloneclass.fragments]
             origin_type = analyze_snippets(code_types)
-            
             s = "\t<version nr=\"%d\" hash=\"%s\" evolution=\"%s\" change=\"%s\" origin_type=\"%s\" parent_hash=\"%s\">\n" % (self.nr, self.hash, self.evolution_pattern, self.change_pattern, origin_type, self.parent_hash)
+        elif self.clone_death:
+            s = "\t<version nr=\"%d\" death_type=\"%s\">\n" % (self.nr, self.clone_death)
+        elif self.evolution_pattern == "Add" or self.evolution_pattern == "Subtract":
+            s = "\t<version nr=\"%d\" hash=\"%s\" evolution=\"%s\" change=\"%s\" parent_hash=\"%s\">\n" % (self.nr, self.hash, self.evolution_pattern, self.change_pattern, self.parent_hash)
         else:
-            if self.clone_death:
-                s = "\t<version nr=\"%s\" death_type=\"%s\">\n" % (self.nr, self.clone_death)
-            else:
-                s = "\t<version nr=\"%d\" hash=\"%s\" evolution=\"%s\" change=\"%s\" move=\"%s\" parent_hash=\"%s\">\n" % (self.nr, self.hash, self.evolution_pattern, self.change_pattern, self.move, self.parent_hash)
-        
+            s = "\t<version nr=\"%d\" hash=\"%s\" evolution=\"%s\" change=\"%s\" move=\"%s\" parent_hash=\"%s\">\n" % (self.nr, self.hash, self.evolution_pattern, self.change_pattern, self.move, self.parent_hash)
+
         try:
             s += self.cloneclass.toXML()
         except:
@@ -329,11 +333,9 @@ def GetEvolution(v1, v2, parent_hash):
     has_subtraction = True if len(v2.fragments) > len(v1.fragments) else False
 
     if has_addition:
-        for f in v2.fragments:
-            if f not in v1.fragments:
-                f.evolution_note = "new"
-            else:
-                f.evolution_note = "same"
+        for f1, f2 in zip(v1.fragments, v2.fragments):
+            if f1 == f2:
+                f2.evolution_note = "Remain"
         return "Add"
 
     if has_subtraction:
@@ -665,16 +667,16 @@ def check_was_moved(pcc, old_pcc):
 
     for new_frag, old_frag in zip(pcc.fragments, old_pcc.fragments):
         if (
-            new_frag.file != old_frag.file or
-            new_frag.ls   != old_frag.ls   or
+            new_frag.file != old_frag.file and
+            new_frag.ls   != old_frag.ls   and
             new_frag.le   != old_frag.le
         ):
             new_frag.move_note = "New file"
             return True
         
         if (
-            new_frag.file == old_frag.file or
-            new_frag.ls   != old_frag.ls   or
+            new_frag.file == old_frag.file and
+            new_frag.ls   != old_frag.ls   and
             new_frag.le   != old_frag.le
         ):
             new_frag.move_note = "Same file"
@@ -918,7 +920,7 @@ def DataCollection():
         if not find_files:
             continue
         
-        if hash_index == 2:
+        if hash_index == 3:
             print('a')
 
         RunCloneDetection()
