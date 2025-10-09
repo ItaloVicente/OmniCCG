@@ -61,3 +61,8 @@ The results of the analysis are stored in two sets of files:
     `dataset/test`.\
 4.  Run clone analysis according to the configuration.\
 5.  Save genealogies into the corresponding output files.
+
+
+# Link
+https://figshare.com/articles/dataset/A_Comparative_Study_of_Code_Clone_Genealogies_in_Test_Code_and_Production_Code_-_Replication_Package/17206997?file=34642655
+

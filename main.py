@@ -13,9 +13,9 @@ import copy
 import subprocess
 
 # Project settings
-GIT_URL = "https://github.com/tjake/Jlama" # The URL of the git repository to clone.
+# GIT_URL = "https://github.com/tjake/Jlama" # The URL of the git repository to clone.
 # GIT_URL = "https://github.com/Grasscutters/Grasscutter"
-# GIT_URL = "https://github.com/denisousa/clones-test"
+GIT_URL = "https://github.com/denisousa/clones-test"
 # GIT_URL = "https://github.com/spring-projects/spring-petclinic"
 USE_MERGE_COMMITS = False
 USE_INTERVAL = False
@@ -70,12 +70,25 @@ class CloneFragment():
         self.code_content = self.get_code_content()
         self.origin_note = None
         self.death_note = None
+        self.evolution_note = None
+        self.move_note = None
 
     def contains(self, other):
         return self.file == other.file and self.ls <= other.ls and self.le >= other.le
 
     def __eq__(self, other):
         return self.file == other.file and self.ls == other.ls and self.le == other.le
+
+    def get_current_commit7(self, repo_path):
+        try:
+            res = subprocess.run(
+                ["git", "-C", repo_path, "rev-parse", "--short=7", "HEAD"],
+                check=True, capture_output=True, text=True
+            )
+            commit7 = res.stdout.strip()
+            return commit7 or None
+        except subprocess.CalledProcessError:
+            return None
 
     def get_code_content(self):
         try:
@@ -93,14 +106,18 @@ class CloneFragment():
             return None
 
     def get_code_from_commit(self, commit_hash):
-        """Obtém o código do fragmento a partir de um commit específico."""
+        path = '/'.join(self.file.split('/')[:4]).replace('../../','./')
+        current_commit = self.get_current_commit7(path)
         try:
             # Checkout no commit e captura o código do fragmento
             print(f"[INFO] Checking out commit {commit_hash}")
-            path = '/'.join(self.file.split('/')[:4]).replace('../../','./')
             subprocess.run(["git", "-C", path, "checkout", commit_hash],
                         check=True, capture_output=True)
-            return self.get_code_content()  # Retorna o conteúdo após o checkout
+            code_content = self.get_code_content()  # Retorna o conteúdo após o checkout
+            subprocess.run(["git", "-C", path, "checkout", current_commit],
+                        check=True, capture_output=True)
+            return code_content
+
         except subprocess.CalledProcessError as e:
             print(f"Erro ao fazer checkout para o commit {commit_hash}: {e}")
             return None
@@ -124,6 +141,10 @@ class CloneFragment():
             return "\t\t\t<source file=\"%s\" startline=\"%d\" endline=\"%d\" function=\"%s\" hash=\"%d\" origin_note=\"%s\"></source>\n" % (self.file, self.ls, self.le,self.function_name, self.function_hash, self.origin_note)
         if self.death_note:
             return "\t\t\t<source file=\"%s\" startline=\"%d\" endline=\"%d\" function=\"%s\" hash=\"%d\" death_note=\"%s\"></source>\n" % (self.file, self.ls, self.le,self.function_name, self.function_hash, self.death_note)
+        if self.evolution_note:
+            return "\t\t\t<source file=\"%s\" startline=\"%d\" endline=\"%d\" function=\"%s\" hash=\"%d\" evolution_note=\"%s\"></source>\n" % (self.file, self.ls, self.le,self.function_name, self.function_hash, self.evolution_note)
+        if self.move_note:
+            return "\t\t\t<source file=\"%s\" startline=\"%d\" endline=\"%d\" function=\"%s\" hash=\"%d\" move_note=\"%s\"></source>\n" % (self.file, self.ls, self.le,self.function_name, self.function_hash, self.move_note)
         return "\t\t\t<source file=\"%s\" startline=\"%d\" endline=\"%d\" function=\"%s\" hash=\"%d\"></source>\n" % (self.file, self.ls, self.le,self.function_name, self.function_hash)
 
     def countLOC(self):
@@ -166,7 +187,7 @@ class CloneVersion():
     def __init__(self, cc = None, h = None, n = None, evo = "None", chan = "None", origin=False, move = False):
         self.cloneclass = cc
         self.hash = h
-        self.before_hash = ""
+        self.parent_hash = ""
         self.nr = n
         self.evolution_pattern = evo
         self.change_pattern = chan
@@ -179,12 +200,12 @@ class CloneVersion():
             code_types = [analyze_method_change(REPO_DIR, fragment.file, fragment.ls, fragment.le, self.hash) for fragment in self.cloneclass.fragments]
             origin_type = analyze_snippets(code_types)
             
-            s = "\t<version nr=\"%d\" hash=\"%s\" evolution=\"%s\" change=\"%s\" origin_type=\"%s\" before_hash=\"%s\">\n" % (self.nr, self.hash, self.evolution_pattern, self.change_pattern, origin_type, self.before_hash)
+            s = "\t<version nr=\"%d\" hash=\"%s\" evolution=\"%s\" change=\"%s\" origin_type=\"%s\" parent_hash=\"%s\">\n" % (self.nr, self.hash, self.evolution_pattern, self.change_pattern, origin_type, self.parent_hash)
         else:
             if self.clone_death:
                 s = "\t<version nr=\"%s\" death_type=\"%s\">\n" % (self.nr, self.clone_death)
             else:
-                s = "\t<version nr=\"%d\" hash=\"%s\" evolution=\"%s\" change=\"%s\" move=\"%s\" before_hash=\"%s\">\n" % (self.nr, self.hash, self.evolution_pattern, self.change_pattern, self.move, self.before_hash)
+                s = "\t<version nr=\"%d\" hash=\"%s\" evolution=\"%s\" change=\"%s\" move=\"%s\" parent_hash=\"%s\">\n" % (self.nr, self.hash, self.evolution_pattern, self.change_pattern, self.move, self.parent_hash)
         
         try:
             s += self.cloneclass.toXML()
@@ -300,14 +321,28 @@ def GetCloneFragment(filename, startline, endline):
 
     return "".join(lines_out)
 
-def GetPattern(v1, v2):
-    evolution = "None"
+def GetEvolution(v1, v2, parent_hash):
     if len(v1.fragments) == len(v2.fragments):
-        evolution = "Same"
-    elif len(v1.fragments) > len(v2.fragments):
-        evolution = "Subtract"
-    else:
-        evolution = "Add"
+        return "Same"
+
+    has_addition = True if len(v2.fragments) > len(v1.fragments) else False
+    has_subtraction = True if len(v2.fragments) > len(v1.fragments) else False
+
+    if has_addition:
+        for f in v2.fragments:
+            if f not in v1.fragments:
+                f.evolution_note = "new"
+            else:
+                f.evolution_note = "same"
+        return "Add"
+
+    if has_subtraction:
+        return "Subtract"
+    
+    return "None"
+    
+def GetPattern(v1, v2, parent_hash):
+    evolution = GetEvolution(v1, v2, parent_hash)
 
     change = "None"
     if evolution == "Same" or evolution == "Subtract":
@@ -492,7 +527,7 @@ def RunCloneDetection():
 
     if (USE_ICLONES):
         print(" >>> Running iClones...")
-        os.system('/opt/unibremen_clone_tools/iclones-0.1.2/iclones.sh -input ' + PROD_DATA_DIR + ' -language ' + LANGUAGE + ' -outformat text -output ' + CUR_RES_DIR +'/iclones_production_results.txt / > /dev/null 2>&1')
+        os.system('/opt/unibremen_c lone_tools/iclones-0.1.2/iclones.sh -input ' + PROD_DATA_DIR + ' -language ' + LANGUAGE + ' -outformat text -output ' + CUR_RES_DIR +'/iclones_production_results.txt / > /dev/null 2>&1')
 
     # Move output to resuls dir
     os.system('mv ' + DATA_DIR + '/production_functions.xml ' + CUR_RES_DIR)
@@ -626,7 +661,7 @@ def RunDensityAnalysis(commitNr,  pcloneclasses):
 
 def check_was_moved(pcc, old_pcc):
     if len(pcc.fragments) != len(old_pcc.fragments):
-        return True
+        return False
 
     for new_frag, old_frag in zip(pcc.fragments, old_pcc.fragments):
         if (
@@ -634,6 +669,15 @@ def check_was_moved(pcc, old_pcc):
             new_frag.ls   != old_frag.ls   or
             new_frag.le   != old_frag.le
         ):
+            new_frag.move_note = "New file"
+            return True
+        
+        if (
+            new_frag.file == old_frag.file or
+            new_frag.ls   != old_frag.ls   or
+            new_frag.le   != old_frag.le
+        ):
+            new_frag.move_note = "Same file"
             return True
 
     return False
@@ -663,7 +707,7 @@ def RunGenealogyAnalysis(commitNr, hash):
                 if lineage.matches(pcc):
                     if lineage.versions[-1].move:
                         pcc_was_moved = check_was_moved(pcc, lineage.versions[-1].cloneclass)
-                        evolution, change = GetPattern(lineage.versions[-1].cloneclass, pcc)
+                        evolution, change = GetPattern(lineage.versions[-1].cloneclass, pcc, lineage.versions[-1].hash)
                         if pcc_was_moved:
                             v = CloneVersion(pcc, hash, commitNr, evolution, change, False, True)
                         else:
@@ -674,7 +718,7 @@ def RunGenealogyAnalysis(commitNr, hash):
 
                     pcc_was_moved = check_was_moved(pcc, lineage.versions[-1].cloneclass)
                     if pcc_was_moved:
-                        evolution, change = GetPattern(lineage.versions[-1].cloneclass, pcc)
+                        evolution, change = GetPattern(lineage.versions[-1].cloneclass, pcc, lineage.versions[-1].hash)
                         lineage.versions.append(CloneVersion(pcc, hash, commitNr, evolution, change, False, True))
                         found = True
                         break
@@ -690,7 +734,7 @@ def RunGenealogyAnalysis(commitNr, hash):
                             pcloneclasses.append(lineage.versions[-1].cloneclass)
                             lineage.versions.pop()
 
-                    evolution, change = GetPattern(lineage.versions[-1].cloneclass, pcc)
+                    evolution, change = GetPattern(lineage.versions[-1].cloneclass, pcc, lineage.versions[-1].hash)
                     if evolution == "Same" and change == "Same" and lineage.versions[-1].evolution_pattern == "Same" and lineage.versions[-1].change_pattern == "Same":            
                         # I need check here!
                         lineage.versions[-1].nr = commitNr
@@ -741,11 +785,11 @@ def timeToString(seconds):
     result += str(seconds) + " seconds"
     return result
 
-def insert_before_hash(hash_index, before_hash):
+def insert_parent_hash(hash_index, parent_hash):
     for lineage in P_LIN_DATA:
         if hash_index == 1:
             continue
-        lineage.versions[-1].before_hash = before_hash
+        lineage.versions[-1].parent_hash = parent_hash
 
 
 def check_lineage_death(hash_index, current_hash):
@@ -788,7 +832,7 @@ def check_lineage_death(hash_index, current_hash):
                     lineage.versions.append(cv)
                     continue  # Passa para a próxima linha de código
 
-                elif files_removed >= 1 and files_removed >= 1 and unchanged_files == 1:
+                elif files_removed >= 1 and files_modified >= 1 and unchanged_files == 1:
                     cv.clone_death = "All code was removed and modifed, but one survive"
                     lineage.versions.append(cv)
                     continue  # Passa para a próxima linha de código
@@ -874,6 +918,9 @@ def DataCollection():
         if not find_files:
             continue
         
+        if hash_index == 2:
+            print('a')
+
         RunCloneDetection()
         RunGenealogyAnalysis(hash_index, current_hash)
         WriteLineageFile(P_LIN_DATA, P_RES_FILE)
@@ -881,7 +928,7 @@ def DataCollection():
         check_lineage_death(hash_index, current_hash)
 
         if hash_index != 1:
-            insert_before_hash(hash_index, hashes[hash_index - 2])
+            insert_parent_hash(hash_index, hashes[hash_index - 2])
         
         # Clean-up
         os.system('rm -rf ' + CUR_RES_DIR)
