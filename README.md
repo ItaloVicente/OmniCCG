@@ -10,6 +10,8 @@
 
 ## Requirements to execute
 Python >= 3.12
+Poetry
+Git 
 
 ## Steps to install
 poetry install
