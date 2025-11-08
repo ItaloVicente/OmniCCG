@@ -43,6 +43,7 @@ The default API output format for clone lineage retrieval is XML.
 - Python >= 3.12
 - Poetry
 - Git
+- Java >= 17
 
 ## Steps to Install
 Install necessary system dependencies (In Linux):
