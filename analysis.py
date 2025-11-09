@@ -1,9 +1,9 @@
 from __future__ import division
 import xml.etree.ElementTree as etree
+from xml.dom import minidom
+import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as etree
 
-
-# Directories
-RES_DIRS = ["java/apache_avro"]
 
 # Output functions
 def printWarning(message):
@@ -410,6 +410,120 @@ def Analysis(RES_DIR):
 
     print("\nDONE")
 
+def Analysis(RES_DIR):
+    P_RES_FILE = RES_DIR + "/production_results.xml"
+    P_DENS_FILE = RES_DIR + "/production_density.csv"
+
+    P_LIN_DATA = parseLineageFile(P_RES_FILE)
+    if not len(P_LIN_DATA):
+        printError("Empty production data: no linages found in " + P_RES_FILE)
+        return None
+
+    p_last_commit = getLastCommitFromDensityCSV(P_DENS_FILE)
+
+    for lineage in P_LIN_DATA:
+        if lineage.containsDoubleVersions():
+            recalculate_lineage(lineage)
+
+    total_lineages = len(P_LIN_DATA)
+
+    p_inconsistent = getNrOfInconsistentChangeLineages(P_LIN_DATA)
+    p_consistent = getNrOfConsistentChangeLineages(P_LIN_DATA)
+    p_stable = getNrOfStableLineages(P_LIN_DATA)
+
+    p_alive = getNrOfAliveLineages(P_LIN_DATA, p_last_commit)
+    p_dead = total_lineages - p_alive
+
+    p_dead_length = getLenghtsOfDeadLineages(P_LIN_DATA, p_last_commit)
+    if p_dead_length:
+        dead_min = min(p_dead_length)
+        dead_avg = float(sum(p_dead_length)) / float(len(p_dead_length))
+        dead_max = max(p_dead_length)
+    else:
+        dead_min = 0
+        dead_avg = 0
+        dead_max = 0
+
+    p_data = countVersions(P_LIN_DATA)
+    add_ = p_data.get("Add", 0)
+    sub_ = p_data.get("Subtract", 0)
+    cons_v = p_data.get("Consistent", 0)
+    incons_v = p_data.get("Inconsistent", 0)
+    total_versions = p_data.get("total", 0)
+
+    same_evo = total_versions - add_ - sub_
+    same_change = total_versions - cons_v - incons_v
+    if (same_evo + same_change) != p_data.get("Same", 0):
+        printWarning("Calculated amount of same versions does not match measured amount in production data.")
+
+    def pct(part, whole):
+        return 0.0 if not whole else float(part) * 100.0 / float(whole)
+
+    add_sub_total = add_ + sub_
+    cons_incons_total = cons_v + incons_v
+
+    root = ET.Element("metrics")
+
+    def add_node(parent, tag, text=None):
+        el = ET.SubElement(parent, tag)
+        if text is not None:
+            el.text = str(text)
+        return el
+
+    add_node(root, "total_clone_lineages", total_lineages)
+
+    cpol = add_node(root, "change_patterns_of_lineages")
+    add_node(cpol, "consistent", round(pct(p_consistent, total_lineages), 2))
+    add_node(cpol, "stable", round(pct(p_stable, total_lineages), 2))
+    add_node(cpol, "inconsistent", round(pct(p_inconsistent, total_lineages), 2))
+
+    status = add_node(root, "status_of_clone_lineages")
+    alive = add_node(status, "alive")
+    add_node(alive, "count", p_alive)
+    add_node(alive, "percentage", pct(p_alive, total_lineages))
+    dead = add_node(status, "dead")
+    add_node(dead, "count", p_dead)
+    add_node(dead, "percentage", pct(p_dead, total_lineages))
+
+    ldead = add_node(root, "length_of_dead_clone_lineages")
+    add_node(ldead, "min", dead_min)
+    add_node(ldead, "avg", dead_avg)
+    add_node(ldead, "max", dead_max)
+
+    add_node(root, "total_amount_of_versions", total_versions)
+
+    evo = add_node(root, "evolution_pattern_of_versions")
+    add_node(evo, "add", round(pct(add_, add_sub_total), 2) if add_sub_total else 0.0)
+    add_node(evo, "subtract", round(pct(sub_, add_sub_total), 2) if add_sub_total else 0.0)
+
+    chg = add_node(root, "change_pattern_of_versions")
+    add_node(chg, "consistent", round(pct(cons_v, cons_incons_total), 2) if cons_incons_total else 0.0)
+    add_node(chg, "inconsistent", round(pct(incons_v, cons_incons_total), 2) if cons_incons_total else 0.0)
+
+    ccc = add_node(root, "consistent_changes_in_consistent_lineage")
+    add_node(ccc, "min", 0)
+    add_node(ccc, "avg", 0)
+    add_node(ccc, "max", 0)
+
+    cci = add_node(root, "consistent_changes_in_inconsistent_lineage")
+    add_node(cci, "min", 0)
+    add_node(cci, "avg", 0)
+    add_node(cci, "max", 0)
+
+    iii = add_node(root, "inconsistent_changes_in_inconsistent_lineage")
+    add_node(iii, "min", 0)
+    add_node(iii, "avg", 0)
+    add_node(iii, "max", 0)
+
+    try:
+        ET.indent(root, space="  ", level=0)
+        xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+        return xml_bytes.decode("utf-8")
+    except AttributeError:
+        dom = minidom.parseString(rough)
+        return dom.toprettyxml(encoding="utf-8").decode("utf-8")
+
+
 def generateCloneLengthFiles(RES_DIR):
         print("STARTING CLONE LENGTH ANALYSIS\n")
         # Files
@@ -443,7 +557,3 @@ def generateCloneLengthFiles(RES_DIR):
                 p_out.write(str(i) + "," + str((100*ratio)/float(len(P_LENS))))
                 p_out.write("\n")
 
-if __name__ == "__main__":
-    for RES_DIR in RES_DIRS:
-        Analysis(RES_DIR)
-        generateCloneLengthFiles(RES_DIR)

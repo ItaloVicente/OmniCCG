@@ -3,6 +3,7 @@ workspace/repo
 workspace/githistory.txt
 workspace/dataset
 
+cloned_repositories
 c/
 java/
 
