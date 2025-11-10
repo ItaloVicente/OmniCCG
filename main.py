@@ -14,7 +14,7 @@ def health():
 @app.post("/detect_clones")
 def detect_clones():
     general_settings = request.get_json(silent=True)
-    xml_obj = execute_omniccg(general_settings) 
+    xml_obj, _, _  = execute_omniccg(general_settings) 
     return Response(xml_obj, status=200, mimetype="application/xml")
 
 @app.post("/snippets")
