@@ -1,5 +1,5 @@
 from flask_cors import CORS
-from core import main
+from core import execute_omniccg
 import subprocess
 from flask import Flask, Response, request, jsonify
 from get_code_snippets import _ensure_repo, _checkout, _safe_repo_path, _slice_lines, _read_text_with_fallback
@@ -14,7 +14,7 @@ def health():
 @app.post("/detect_clones")
 def detect_clones():
     general_settings = request.get_json(silent=True)
-    xml_obj = main(general_settings) 
+    xml_obj = execute_omniccg(general_settings) 
     return Response(xml_obj, status=200, mimetype="application/xml")
 
 @app.post("/snippets")
