@@ -80,10 +80,11 @@ def get_metrics():
     base_dir = Path.cwd() / "cloned_repositories" / project
     metrics_path = (base_dir / "metrics.xml").resolve()
     xml_result = open(metrics_path, 'r').read()
-
+    
     return Response(xml_result, status=200, mimetype="application/xml")
 
 
 if __name__ == "__main__":
-    (app.run(host="127.0.0.1", port=5000, debug=True))
+    # https://chatgpt.com/share/690d2d88-8e70-800d-b9c1-052e508baf89
+    app.run(host="127.0.0.1", port=5000, debug=True)
 

@@ -14,9 +14,11 @@ from datetime import datetime, timedelta
 from typing import Union, Dict, Any, List, Iterable, Optional, Tuple
 from git import Repo
 try:
-    from metrics import generate_detailed_report
+    from .metrics import generate_detailed_report
+    from .analysis import count_java_methods_in_file
 except:
     from metrics import generate_detailed_report
+    from analysis import count_java_methods_in_file
 
 # =========================
 # Cross‑platform helpers
