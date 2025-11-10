@@ -3,6 +3,7 @@ from core import execute_omniccg
 import subprocess
 from flask import Flask, Response, request, jsonify
 from get_code_snippets import _ensure_repo, _checkout, _safe_repo_path, _slice_lines, _read_text_with_fallback
+from pathlib import Path
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -17,7 +18,7 @@ def detect_clones():
     xml_obj, _, _  = execute_omniccg(general_settings) 
     return Response(xml_obj, status=200, mimetype="application/xml")
 
-@app.post("/snippets")
+@app.post("/get_code_snippets")
 def snippets():
     payload = request.get_json(silent=True) or {}
     git_url = payload.get("git_url", "")
@@ -71,7 +72,18 @@ def snippets():
         "snippets": results
     }), 200
 
+@app.post("/get_metrics")
+def get_metrics():
+    payload = request.get_json(silent=True) or {}
+    git_url = payload.get("git_url", "")
+    project = git_url.split('/')[-1]
+    base_dir = Path.cwd() / "cloned_repositories" / project
+    metrics_path = (base_dir / "metrics.xml").resolve()
+    xml_result = open(metrics_path, 'r').read()
+
+    return Response(xml_result, status=200, mimetype="application/xml")
+
+
 if __name__ == "__main__":
-    # https://chatgpt.com/share/690d2d88-8e70-800d-b9c1-052e508baf89
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    (app.run(host="127.0.0.1", port=5000, debug=True))
 

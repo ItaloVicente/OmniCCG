@@ -14,9 +14,9 @@ from datetime import datetime, timedelta
 from typing import Union, Dict, Any, List, Iterable, Optional, Tuple
 from git import Repo
 try:
-    from .analysis import Analysis, count_java_methods_in_file
+    from metrics import generate_detailed_report
 except:
-    from analysis import Analysis, count_java_methods_in_file
+    from metrics import generate_detailed_report
 
 # =========================
 # Cross‑platform helpers
@@ -87,9 +87,9 @@ class Paths:
     clone_detector_xml: str = field(default_factory=lambda: os.path.join("clone_detector_result", "result.xml"))
 
     hist_file: str = field(default_factory=lambda: os.path.join("workspace", "githistory.txt"))  # overwritten in main()
+    metrics_xml: str = field(default_factory=lambda: os.path.join("workspace", "metrics.xml"))  # overwritten in main()
     p_res_file: str = field(default_factory=lambda: os.path.join("final_results", "production_results.xml"))
     p_dens_file: str = field(default_factory=lambda: os.path.join("final_results", "production_density.csv"))
-
 
 @dataclass
 class State:
@@ -592,12 +592,6 @@ def find_method_end(lines, decl_line, brace_col):
 # Clone detection (cross‑platform)
 # =========================
 
-import os
-import shutil
-import subprocess
-from pathlib import Path
-import requests
-
 def RunCloneDetection(ctx: "Context", current_hash: str):
     s, p = ctx.settings, ctx.paths
     print("Starting clone detection:")
@@ -1084,6 +1078,7 @@ def execute_omniccg(general_settings: Dict[str, Any]) -> str:
     paths.data_dir = os.path.join(base_dir, "dataset")
     paths.prod_data_dir = os.path.join(paths.data_dir, "production")
     paths.hist_file = os.path.join(base_dir, "githistory.txt")
+    paths.metrics_xml = os.path.join(base_dir, "metrics.xml")
 
     # Ensure folders exist
     os.makedirs(paths.res_dir, exist_ok=True)
@@ -1166,7 +1161,8 @@ def execute_omniccg(general_settings: Dict[str, Any]) -> str:
     # Otherwise, finalize outputs
     WriteDensityFile(ctx, ctx.state.p_dens_data, paths.p_dens_file)
     lineages_xml = WriteLineageFile(ctx, ctx.state.p_lin_data, paths.p_res_file)
-    metrics_xml = Analysis(paths.res_dir)
+    metrics_xml = generate_detailed_report(lineages_xml, len(hashes), ctx.state.p_dens_data)
+    Path(ctx.paths.metrics_xml).write_text(metrics_xml, encoding="utf-8")
     genealogy_xml = build_genealogy_xml(lineages_xml, metrics_xml)
 
     print("\nDONE")
