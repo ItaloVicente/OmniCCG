@@ -1,9 +1,18 @@
 FROM python:3.12-slim
 
-# Instalar dependências do sistema e o FreeTXL
+# Instalar dependências do sistema
 RUN apt-get update && \
-    apt-get install -y git curl python3-venv pip default-jre unzip freetxl && \
+    apt-get install -y git curl python3-venv pip && \
     rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && \
+    apt-get install -y default-jre curl unzip
+
+# Instalar FreeTXL
+RUN curl -L -o /tmp/freetxl.tar.gz https://txl.ca/download/txl10.8b.linux64.tar.gz && \
+    tar -xzf /tmp/freetxl.tar.gz -C /opt && \
+    ln -s /opt/txl10.8b.linux64/txl /usr/local/bin/txl && \
+    rm /tmp/freetxl.tar.gz
 
 # Instalar Poetry (método recomendado)
 RUN curl -sSL https://install.python-poetry.org | python3 -
