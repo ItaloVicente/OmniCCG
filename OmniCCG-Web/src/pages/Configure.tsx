@@ -17,7 +17,7 @@ import { toast } from "sonner";
 
 type DetectionTool = "nicad" | "ccfinder" | "conqat" | "simian" | "pmd";
 
-const API_URL = "http://127.0.0.1:5000/detect_clones";
+const API_URL = "https://omniccg.onrender.com/detect_clones";
 
 // ---------- Loading Overlay (full-screen) ----------
 const LoadingOverlay = ({
