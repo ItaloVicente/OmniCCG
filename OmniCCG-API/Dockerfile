@@ -13,6 +13,8 @@ RUN curl -L -o /tmp/freetxl.tar.gz https://txl.ca/download/25536-txl10.8b.linux6
     mkdir -p /opt/txl && \
     tar -xzf /tmp/freetxl.tar.gz -C /opt/txl --strip-components=1 && \
     ln -s /opt/txl/txl /usr/local/bin/txl && \
+    mkdir -p /usr/local/TXL10.8b && \
+    ln -s /opt/txl/txl /usr/local/TXL10.8b/txl && \
     rm /tmp/freetxl.tar.gz
 
 # Instalar Poetry (método recomendado)
@@ -37,4 +39,5 @@ EXPOSE 5000
 
 # Comando padrão para iniciar a app
 CMD ["python3", "main.py"]
+
 
