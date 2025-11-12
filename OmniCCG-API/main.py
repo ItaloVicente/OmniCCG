@@ -96,5 +96,5 @@ def get_metrics():
 
 if __name__ == "__main__":
     # https://chatgpt.com/share/690d2d88-8e70-800d-b9c1-052e508baf89
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
 

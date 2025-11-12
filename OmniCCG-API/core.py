@@ -5,6 +5,7 @@ import shutil
 import hashlib
 import re
 import platform
+import requests
 import subprocess
 import stat
 from dataclasses import dataclass, field
@@ -26,6 +27,23 @@ except:
 # =========================
 # Cross‑platform helpers
 # =========================
+
+def get_permission(repo):
+    repo = Path(repo)  # <- mude aqui
+
+    # Make everything readable; add 'execute' only where it makes sense (dirs or files already executable).
+    subprocess.run(
+        ["chmod", "-R", "a+rX", str(repo)],
+        check=True
+    )
+
+    # Ensure the owner can write throughout the repo (keeps group/others read-only).
+    subprocess.run(
+        ["chmod", "-R", "u+w", str(repo)],
+        check=True
+    )
+
+print("Permissions normalized: a+rX everywhere, u+w everywhere.")
 
 def run_cmd(cmd: List[str], cwd: Optional[Union[str, Path]] = None, check: bool = False) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, cwd=str(cwd) if cwd else None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=check)
@@ -715,6 +733,7 @@ def RunCloneDetection(ctx: "Context", current_hash: str):
     s, p = ctx.settings, ctx.paths
     print("Starting clone detection:")
 
+
     # Normalize paths
     out_dir = Path(p.clone_detector_dir)
     out_xml = Path(p.clone_detector_xml)
@@ -767,25 +786,15 @@ def RunCloneDetection(ctx: "Context", current_hash: str):
         print(" >>> Running nicad6...")
         os.makedirs(p.cur_res_dir, exist_ok=True)
 
-        # Run NiCad with stdin redirected to suppress interactive prompts
         subprocess.run(["./nicad6", "functions", "java", p.prod_data_dir],
                     cwd=Path(p.tools_dir) / "NiCad",
-                    stdin=subprocess.DEVNULL,  # Prevent interactive prompts
                     check=True)
 
         nicad_xml = f"{p.prod_data_dir}_functions-clones/production_functions-clones-0.30-classes.xml"
         shutil.move(nicad_xml, p.clone_detector_xml)
-        
-        # Clean up clones directory using robust removal
         clones_dir = Path(f"{p.prod_data_dir}_functions-clones")
-        safe_rmtree(clones_dir)
-        
-        # Clean up extracted functions directory
-        functions_dir = Path(f"{p.prod_data_dir}_functions")
-        if functions_dir.exists():
-            safe_rmtree(functions_dir)
+        shutil.rmtree(clones_dir, ignore_errors=True)
 
-        # Clean up log files
         data_dir = Path(ctx.paths.data_dir)
         for log_file in data_dir.glob("*.log"):
             try:

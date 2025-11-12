@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  omniccg:
+    build: .
+    container_name: omniccg_container
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    tty: true
