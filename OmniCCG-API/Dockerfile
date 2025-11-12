@@ -9,9 +9,10 @@ RUN apt-get update && \
     apt-get install -y default-jre curl unzip
 
 # Instalar FreeTXL
-RUN curl -L -o /tmp/freetxl.tar.gz https://txl.ca/download/txl10.8b.linux64.tar.gz && \
-    tar -xzf /tmp/freetxl.tar.gz -C /opt && \
-    ln -s /opt/txl10.8b.linux64/txl /usr/local/bin/txl && \
+RUN curl -L -o /tmp/freetxl.tar.gz https://txl.ca/download/25536-txl10.8b.linux64.tar.gz && \
+    mkdir -p /opt/txl && \
+    tar -xzf /tmp/freetxl.tar.gz -C /opt/txl --strip-components=1 && \
+    ln -s /opt/txl/txl /usr/local/bin/txl && \
     rm /tmp/freetxl.tar.gz
 
 # Instalar Poetry (método recomendado)
@@ -36,3 +37,4 @@ EXPOSE 5000
 
 # Comando padrão para iniciar a app
 CMD ["python3", "main.py"]
+
