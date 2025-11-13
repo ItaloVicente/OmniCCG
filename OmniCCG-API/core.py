@@ -1199,16 +1199,6 @@ def execute_omniccg(general_settings: Dict[str, Any]) -> str:
     paths.tools_dir = os.path.join(pkg_root_str, "tools")
     paths.script_dir = os.path.join(pkg_root_str, "scripts")
 
-    # Results & detector output
-    paths.res_dir = os.path.join(pkg_root_str, "results")
-    paths.cur_res_dir = os.path.join(paths.res_dir, "0000000")
-    paths.clone_detector_dir = os.path.join(pkg_root_str, "clone_detector_result")
-    paths.clone_detector_xml = os.path.join(paths.clone_detector_dir, "result.xml")
-
-    # Output files
-    paths.p_res_file = os.path.join(paths.res_dir, "production_results.xml")
-    paths.p_dens_file = os.path.join(paths.res_dir, "production_density.csv")
-
     # Workspace (clones, datasets, history) lives under omniccg/cloned_repositories/<repo_name>
     repo_name = _derive_repo_name(settings)
     base_dir = os.path.join(pkg_root_str, "cloned_repositories", repo_name)
@@ -1218,6 +1208,14 @@ def execute_omniccg(general_settings: Dict[str, Any]) -> str:
     paths.prod_data_dir = os.path.join(paths.data_dir, "production")
     paths.hist_file = os.path.join(base_dir, "githistory.txt")
     paths.metrics_xml = os.path.join(base_dir, "metrics.xml")
+    paths.p_res_file = os.path.join(base_dir, "genealogy.xml")
+    paths.p_dens_file = os.path.join(base_dir, "density.csv")
+
+    # Results & detector output
+    paths.res_dir = os.path.join(base_dir, "final_result")
+    paths.cur_res_dir = os.path.join(paths.res_dir, "0000000")
+    paths.clone_detector_dir = os.path.join(base_dir, "aggregated_results")
+    paths.clone_detector_xml = os.path.join(paths.clone_detector_dir, "result.xml")
 
     # Ensure folders exist
     os.makedirs(paths.res_dir, exist_ok=True)
