@@ -113,13 +113,13 @@ curl -X POST "http://127.0.0.1:5000/detect_clones"   -H "Content-Type: applicati
 
 ```
 curl -X POST "http://127.0.0.1:5000/detect_clones"   -H "Content-Type: application/json"   --data '{
-    "git_repository": "https://github.com/booklore-app/booklore",
+    "git_repository": "https://github.com/apache/avro",
     "user_settings": {
-      "from_first_commit": true,
+      "from_first_commit": null,
       "from_a_specific_commit": null,
-      "days_prior": null,
+      "days_prior": 360,
       "merge_commit": null,
-      "fixed_leaps": 200,
+      "fixed_leaps": null,
       "clone_detector": "nicad"
     }
   }'

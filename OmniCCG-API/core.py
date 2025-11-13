@@ -15,11 +15,17 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from typing import Union, Dict, Any, List, Iterable, Optional, Tuple
 from git import Repo
+from git.exc import BadName
+
 try:
+    from .control import git_repos_to_control
+    from .compute_time import timed
     from .get_method_name import get_enclosing_java_method
     from .metrics import generate_detailed_report
     from .analysis import count_java_methods_in_file
 except:
+    from control import git_repos_to_control
+    from compute_time import timed
     from get_method_name import get_enclosing_java_method
     from metrics import generate_detailed_report
     from analysis import count_java_methods_in_file
@@ -27,23 +33,6 @@ except:
 # =========================
 # Cross‑platform helpers
 # =========================
-
-def get_permission(repo):
-    repo = Path(repo)  # <- mude aqui
-
-    # Make everything readable; add 'execute' only where it makes sense (dirs or files already executable).
-    subprocess.run(
-        ["chmod", "-R", "a+rX", str(repo)],
-        check=True
-    )
-
-    # Ensure the owner can write throughout the repo (keeps group/others read-only).
-    subprocess.run(
-        ["chmod", "-R", "u+w", str(repo)],
-        check=True
-    )
-
-print("Permissions normalized: a+rX everywhere, u+w everywhere.")
 
 def run_cmd(cmd: List[str], cwd: Optional[Union[str, Path]] = None, check: bool = False) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, cwd=str(cwd) if cwd else None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=check)
@@ -554,16 +543,23 @@ def SetupRepo(ctx: "Context"):
 def PrepareGitHistory(ctx: "Context"):
     print("Getting git history")
     s, p = ctx.settings, ctx.paths
-    now = datetime.now()
     repo = Repo(p.repo_dir)
 
     rev = "HEAD"
     iter_kwargs: Dict[str, Any] = {}
 
     if s.specific_commit:
-        rev = f"{s.specific_commit}..HEAD"
+        try:
+            target_commit = repo.commit(s.specific_commit)
+        except BadName:
+            raise RuntimeError(
+                f"Specific commit '{s.specific_commit}' not found in repository {p.repo_dir}"
+            )
+        rev = f"{target_commit.hexsha}..HEAD"
     elif s.use_days and s.days is not None:
-        iter_kwargs = {"since": (now - timedelta(days=int(s.days or 0))).strftime('%Y-%m-%d %H:%M:%S')}
+        rev = "--all"
+        cutoff_datetime = datetime.now() - timedelta(days=int(s.days or 0))
+        iter_kwargs = {"since": cutoff_datetime}
     elif s.from_begin:
         rev = "--all"
 
@@ -1187,6 +1183,7 @@ def validate_user_input_or_raise(general_settings: Dict[str, Any]) -> None:
     if dp is not None and not dp_ok:
         raise ValueError("'days_prior' must be an integer > 0 when provided.")
 
+@timed()
 def execute_omniccg(general_settings: Dict[str, Any]) -> str:
     validate_user_input_or_raise(general_settings)
     settings = init_settings_from_user(general_settings)
@@ -1245,6 +1242,9 @@ def execute_omniccg(general_settings: Dict[str, Any]) -> str:
     repo = Repo(paths.repo_dir)
 
     for hash_index in range(len(hashes)):
+        if settings.git_url not in git_repos_to_control:
+            break
+
         iteration_start_time = time.time()
         analysis_index += 1
         current_hash = hashes[hash_index]

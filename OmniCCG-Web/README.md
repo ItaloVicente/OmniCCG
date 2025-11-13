@@ -100,36 +100,6 @@ npm run build
 npm run preview
 ```
 
-## Project Structure
-
-```
-src/
-├── components/
-│   ├── genealogy/          # Genealogy visualization components
-│   │   ├── LineageGraph.tsx       # Cytoscape graph renderer
-│   │   ├── NodeDetailsPanel.tsx   # Node information sidebar
-│   │   └── CodeSnippetModal.tsx   # Code viewer modal
-│   └── ui/                 # shadcn/ui components
-├── pages/
-│   ├── Home.tsx           # Configuration page
-│   ├── Visualize.tsx      # Genealogy visualization
-│   ├── Metrics.tsx        # Metrics dashboard
-│   └── NotFound.tsx       # 404 page
-├── services/
-│   └── api.ts             # API client
-└── types/
-    └── index.ts           # TypeScript type definitions
-```
-
-## API Integration
-
-The frontend communicates with the OmniCCG backend API:
-
-- `POST /detect_clones` - Start clone detection analysis
-- `GET /clone_genealogy/{taskId}` - Retrieve genealogy results
-- `GET /get_metrics/{taskId}` - Fetch metrics data
-- `POST /get_code_snippets` - Retrieve source code snippets
-
 ## Development
 
 ### Code Style

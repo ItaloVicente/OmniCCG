@@ -11,6 +11,7 @@ import type {
 } from "@/types";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
+console.log(API_BASE_URL)
 
 /** ---------------- XML -> GenealogyData ---------------- */
 const parseXMLToGenealogyData = (xmlString: string): GenealogyData => {
