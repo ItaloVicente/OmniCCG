@@ -54,6 +54,4 @@ The **`results_of_evaluation/`** directory contains the results obtained in our 
 
 ## Instructions
 To learn how to install and run **`OmniCCG-API`**, **`OmniCCG-Web`**, and **`OmniCCG-CLI`**, you can read the README.md file for each project.
-          
-## Lincense
-This project is part of the **OmniCCG** for studying code clone genealogies. All rights reserved by the maintainers.
+
