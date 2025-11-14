@@ -54,17 +54,5 @@ The **`results_of_evaluation/`** directory contains the results obtained in our 
 ## Instructions
 To learn how to install and run **`OmniCCG-API`**, **`OmniCCG-Web`**, and **`OmniCCG-CLI`**, you can read the README.md file for each project.
           
-## Installation and use		
-> For exact instructions, check the README files for each subfolder. Below is a general installation guide.
-### Prerequisites
-- Python 3.12+
-- Node.js 18+ and npm
-- Poetry (for Python dependency management)
-- Java 17+ (required by NiCad / Simian clone detectors)
-- Git
-
 ## Lincense
 This project is part of the **OmniCCG** for studying code clone genealogies. All rights reserved by the maintainers.
-
-## Authors/Contact
-[nome dos desenvolvedores + link do contato]
