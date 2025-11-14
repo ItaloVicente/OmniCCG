@@ -824,8 +824,8 @@ def RunCloneDetection(ctx: "Context", current_hash: str):
     if tool == "simian":
         print(" >>> Running Simian...")
         java_jar_command = f"java -jar {os.path.join(p.tools_dir, 'simian', 'simian-4.0.0.jar')}"
-        options_command = "-format  ter=xml -threshold=20"
-        simian_command = f'{java_jar_command} {options_command} "{p.prod_data_dir}"/**/*.java > "{p.clone_detector_xml}"'
+        options_command = "-formatter=xml -threshold=20"
+        simian_command = f'{java_jar_command} {options_command} "{p.prod_data_dir}/**/*.java" > "{p.clone_detector_xml}"'
         os.system(simian_command)
         parse_simian_to_clones(p.clone_detector_xml)
         print("Finished clone detection.\n")
