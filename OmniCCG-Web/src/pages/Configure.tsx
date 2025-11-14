@@ -526,6 +526,12 @@ const Configure = () => {
                             </div>
                           )}
 
+                         <div className="text-sm text-muted-foreground mt-1">
+                            Start Commit:{" "}
+                            {it.start_commit ?? 
+                              (it.from_first_commit ? "first" : "")}
+                          </div>
+
                           {typeof it.from_lasy_days !== "undefined" && (
                             <div className="text-sm text-muted-foreground mt-1">
                               From last days: {it.from_lasy_days}
