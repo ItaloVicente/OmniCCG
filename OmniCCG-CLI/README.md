@@ -38,7 +38,6 @@ poetry install
 pip install -e .
 ```
 
-e
 ### Basic usage (no config file)
 You can run the application from any path:
 ```sh
