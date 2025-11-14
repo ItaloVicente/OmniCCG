@@ -52,6 +52,6 @@ We performed a preliminary evaluation of **OmniCCG** to showcase its main functi
 
 The **`results_of_evaluation/`** directory contains the results obtained in our evaluation.
 
-## Instructions
+## Instructions for installing and executes OmniCCG
 To learn how to install and run **`OmniCCG-API`**, **`OmniCCG-Web`**, and **`OmniCCG-CLI`**, you can read the README.md file for each project.
 
