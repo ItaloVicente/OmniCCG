@@ -10,7 +10,8 @@ OmniCCG offers two ways to use it.
 1. Graphical user interface
 OmniCCG can be used through a modern, responsive web interface that makes it easy to explore and track clone genealogies in a repository.
 You may either:
-= Use the hosted online platform through the following [link](https://omniccg-ipwd.vercel.app/)
+
+- Use the online platform through the following [link](https://omniccg-ipwd.vercel.app/)
 - Use the platform locally by installing and executing **`OmniCCG-API`** and **`OmniCCG-Web`**.
 
 2. Console application
